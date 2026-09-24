@@ -25,6 +25,27 @@ else
     WORKER="$(hostname)"
 fi
 
+# Sanitiza o nome do worker:
+# Substitui '.' por '_' para evitar que o Stratum da Kryptex interprete o '.' como novo delimitador
+# e acabe truncando o nome do worker (ex: hostname 'c.52464923' era truncado para apenas 'c')
+WORKER=$(echo "$WORKER" | tr '.' '_' | tr -cd 'a-zA-Z0-9_-')
+
+# Se o worker ficou vazio, ou se for apenas 'c' ou 'C', recupera o hostname completo ou id da máquina
+if [ -z "$WORKER" ] || [ "$WORKER" = "c" ] || [ "$WORKER" = "C" ]; then
+    RAW_HOST=$(cat /etc/hostname 2>/dev/null || hostname 2>/dev/null || echo "")
+    CLEAN_HOST=$(echo "$RAW_HOST" | tr '.' '_' | tr -cd 'a-zA-Z0-9_-')
+    if [ -n "$CLEAN_HOST" ] && [ "$CLEAN_HOST" != "c" ] && [ "$CLEAN_HOST" != "C" ]; then
+        WORKER="$CLEAN_HOST"
+    else
+        CONTAINER_SHORT=$(cat /etc/machine-id 2>/dev/null | cut -c1-8)
+        if [ -n "$CONTAINER_SHORT" ]; then
+            WORKER="c_${CONTAINER_SHORT}"
+        else
+            WORKER="vast_$(date +%s | cut -c6-10)"
+        fi
+    fi
+fi
+
 # Formata wallet como USER.WORKER
 if [[ "$KRYPTEX_USER" != *"."* && "$KRYPTEX_USER" != *"/"* ]]; then
     MINER_WALLET="${KRYPTEX_USER}.${WORKER}"
