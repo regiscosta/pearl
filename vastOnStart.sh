@@ -101,7 +101,10 @@ nohup "$SRBMINER_BIN" \
     --algorithm pearlhash \
     --pool "$PRL_POOL" \
     --wallet "$MINER_WALLET" \
-    > miner.log 2>&1 &
+    --log-file miner.log \
+    --log-file-mode 0 \
+    --extended-log \
+    > /dev/null 2>&1 &
 
 echo "  Minerador GPU (PRL) iniciado com PID: $!"
 
@@ -120,22 +123,24 @@ if [ "$CPU_MINING_ENABLED" = "true" ] || [ "$CPU_MINING_ENABLED" = "1" ]; then
         --pool "$XEL_POOL" \
         --wallet "$MINER_WALLET" \
         --cpu-threads "$CPU_THREADS" \
-        > cpu_miner.log 2>&1 &
+        --log-file cpu_miner.log \
+        --log-file-mode 0 \
+        --extended-log \
+        > /dev/null 2>&1 &
 
     echo "  Minerador CPU (XEL) iniciado com PID: $!"
 fi
 
 echo "=== INICIALIZAÇÃO KRYPTEX CONCLUÍDA COM SUCESSO ==="
 
-# --- Push de Hashrate (se API_URL estiver definida) ---
-if [ -n "$API_URL" ]; then
-    echo "Iniciando script de push de hashrate em background..."
-    cat << 'EOF' > push_hashrate.sh
+# --- Push de Hashrate e Manutenção de Espaço em Disco ---
+echo "Iniciando script de monitoramento e push de hashrate em background..."
+cat << 'EOF' > push_hashrate.sh
 #!/bin/bash
 API_URL="$1"
 WORKER="$2"
 
-echo "Push de hashrate iniciado: API=$API_URL, Worker=$WORKER"
+echo "Push de hashrate e monitoramento de logs iniciado: API=$API_URL, Worker=$WORKER"
 
 # Detecta GPU e contagem de GPU se nvidia-smi estiver disponível
 GPU_COUNT=1
@@ -150,6 +155,16 @@ CPU_CORES=$(nproc 2>/dev/null || echo 0)
 
 while true; do
     sleep 30
+
+    # 1. Rotação e limpeza contínua de logs para economizar espaço em disco (máx 500 linhas)
+    for LOG_FILE in miner.log cpu_miner.log push_hashrate.log; do
+        if [ -f "$LOG_FILE" ]; then
+            TOTAL_LINES=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
+            if [ "$TOTAL_LINES" -gt 1000 ]; then
+                tail -n 500 "$LOG_FILE" > "${LOG_FILE}.tmp" 2>/dev/null && mv -f "${LOG_FILE}.tmp" "$LOG_FILE" 2>/dev/null
+            fi
+        fi
+    done
 
     GPU_HASHRATE=""
     CPU_HASHRATE=""
@@ -201,8 +216,8 @@ while true; do
     
     JSON="$JSON}"
 
-    # Só envia se tiver pelo menos um hashrate
-    if [ -n "$GPU_HASHRATE" ] || [ -n "$CPU_HASHRATE" ]; then
+    # Só envia se tiver pelo menos um hashrate e API_URL estiver definida
+    if [ -n "$API_URL" ] && ([ -n "$GPU_HASHRATE" ] || [ -n "$CPU_HASHRATE" ]); then
         echo "Enviando: GPU=${GPU_HASHRATE:-n/a} TH/s, CPU=${CPU_HASHRATE:-n/a} kH/s para $API_URL"
         curl -s -m 10 -X POST -H "Content-Type: application/json" \
              -d "$JSON" \
@@ -210,6 +225,6 @@ while true; do
     fi
 done
 EOF
-    chmod +x push_hashrate.sh
-    nohup ./push_hashrate.sh "$API_URL" "$WORKER" > push_hashrate.log 2>&1 &
-fi
+chmod +x push_hashrate.sh
+nohup ./push_hashrate.sh "$API_URL" "$WORKER" > push_hashrate.log 2>&1 &
+
