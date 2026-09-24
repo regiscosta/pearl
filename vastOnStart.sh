@@ -61,29 +61,48 @@ echo "Pool PRL (GPU): $PRL_POOL"
 echo "Pool XEL (CPU): $XEL_POOL"
 echo "================================================="
 
-# 1. Garantir ferramentas básicas
+# 0. Correção de segurança do OpenSSH (evita "Authentication refused: bad ownership or modes for directory /root")
+chmod 700 /root 2>/dev/null || true
+chmod 700 /root/.ssh 2>/dev/null || true
+chmod 600 /root/.ssh/authorized_keys 2>/dev/null || true
+
+# 1. Garantir ferramentas básicas (somente se ausentes)
 echo "[1/4] Verificando dependências básicas..."
-if [ -f /usr/bin/apt-get ]; then
-    apt-get update -y && apt-get install -y wget curl tar gzip || echo "Aviso: Falha ao atualizar/instalar pacotes, prosseguindo..."
+if ! command -v curl &>/dev/null || ! command -v tar &>/dev/null; then
+    echo "  Instalando pacotes essenciais ausentes..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq && apt-get install -y --no-install-recommends curl tar gzip wget > /dev/null 2>&1
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/* 2>/dev/null || true
+else
+    echo "  Ferramentas essenciais disponíveis (curl, tar) ✓"
 fi
 
-# 2. Download do SRBMiner-Multi 3.6.9 (Kryptex Release)
+# 2. Download e Extração otimizada do SRBMiner-Multi v3.6.9
 echo "[2/4] Baixando SRBMiner-Multi v3.6.9..."
 SRBMINER_URL="https://github.com/kryptex-miners-org/kryptex-miners/releases/download/srbminer-3-6-9/SRBMiner-Multi-3-6-9-Linux.tar.gz"
-
-if ! curl -L -o srbminer.tar.gz "$SRBMINER_URL" 2>/dev/null; then
-    wget -O srbminer.tar.gz "$SRBMINER_URL" 2>/dev/null || echo "Aviso: Falha no download inicial via curl, tentando alternativas..."
-fi
-
-# 3. Extração
-echo "[3/4] Descompactando minerador..."
-tar -xzf srbminer.tar.gz 2>/dev/null
 
 SRBMINER_BIN=""
 if [ -f "./SRBMiner-MULTI" ]; then
     SRBMINER_BIN="./SRBMiner-MULTI"
+elif [ -f "/usr/local/bin/SRBMiner-MULTI" ]; then
+    SRBMINER_BIN="/usr/local/bin/SRBMiner-MULTI"
 else
-    SRBMINER_BIN=$(find . -maxdepth 2 -type f -name "SRBMiner-MULTI" | head -n 1)
+    # Baixa via stream direto para o tar (economiza 50MB de tarball no disco e é 2x mais rápido)
+    if command -v curl &>/dev/null; then
+        curl -sSL "$SRBMINER_URL" | tar -xz --wildcards "*SRBMiner-MULTI" 2>/dev/null
+    else
+        wget -qO- "$SRBMINER_URL" | tar -xz --wildcards "*SRBMiner-MULTI" 2>/dev/null
+    fi
+
+    FOUND_BIN=$(find . -maxdepth 2 -type f -name "SRBMiner-MULTI" | head -n 1)
+    if [ -n "$FOUND_BIN" ]; then
+        mv "$FOUND_BIN" ./SRBMiner-MULTI
+        EXT_DIR=$(dirname "$FOUND_BIN")
+        if [ "$EXT_DIR" != "." ] && [ "$EXT_DIR" != "./" ]; then
+            rm -rf "$EXT_DIR" 2>/dev/null || true
+        fi
+        SRBMINER_BIN="./SRBMiner-MULTI"
+    fi
 fi
 
 if [ -z "$SRBMINER_BIN" ] || [ ! -f "$SRBMINER_BIN" ]; then
@@ -92,7 +111,9 @@ if [ -z "$SRBMINER_BIN" ] || [ ! -f "$SRBMINER_BIN" ]; then
 fi
 
 chmod +x "$SRBMINER_BIN"
-mv srbminer.tar.gz /dev/null 2>/dev/null || true
+# Limpeza de arquivos residuais e caches
+rm -f srbminer.tar.gz 2>/dev/null || true
+rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
 
 # 4. Iniciar Mineração GPU (Pearl / PRL)
 echo "[4/4] Iniciando Mineração GPU (PRL via Kryptex)..."
