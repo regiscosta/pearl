@@ -13,6 +13,7 @@ PRL_POOL="${PRL_POOL:-prl.kryptex.network:7048}"
 XEL_POOL="${XEL_POOL:-xel.kryptex.network:7019}"
 CPU_THREAD_PERCENT="${CPU_THREAD_PERCENT:-75}"
 CPU_MINING_ENABLED="${CPU_MINING_ENABLED:-true}"
+API_URL="${API_URL:-https://bc8e-38-43-102-239.ngrok-free.app}"
 
 # Determina o nome do worker preferencialmente pelo VAST_CONTAINERLABEL
 if [ -n "$VAST_CONTAINERLABEL" ]; then
@@ -158,8 +159,8 @@ echo "=== INICIALIZAÇÃO KRYPTEX CONCLUÍDA COM SUCESSO ==="
 echo "Iniciando script de monitoramento e push de hashrate em background..."
 cat << 'EOF' > push_hashrate.sh
 #!/bin/bash
-API_URL="$1"
-WORKER="$2"
+API_URL="${1:-${API_URL:-https://bc8e-38-43-102-239.ngrok-free.app}}"
+WORKER="${2:-${WORKER:-$(hostname)}}"
 
 echo "Push de hashrate e monitoramento de logs iniciado: API=$API_URL, Worker=$WORKER"
 
