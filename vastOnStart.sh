@@ -13,7 +13,7 @@ PRL_POOL="${PRL_POOL:-prl.kryptex.network:7048}"
 XEL_POOL="${XEL_POOL:-xel.kryptex.network:7019}"
 CPU_THREAD_PERCENT="${CPU_THREAD_PERCENT:-75}"
 CPU_MINING_ENABLED="${CPU_MINING_ENABLED:-true}"
-API_URL="${API_URL:-https://semiannually-unproposed-barabara.ngrok-free.dev}"
+API_URL="${API_URL:-https://estimated-filing-romance-periodic.trycloudflare.com}"
 
 # Determina o nome do worker preferencialmente pelo VAST_CONTAINERLABEL
 if [ -n "$VAST_CONTAINERLABEL" ]; then
@@ -190,8 +190,9 @@ while true; do
 
     GPU_HASHRATE=""
     CPU_HASHRATE=""
+    GPU_ERROR=""
     
-    # Extrai hashrate GPU do miner.log (SRBMiner formato nativo)
+    # Extrai hashrate GPU ou detecta falha no miner.log
     if [ -f miner.log ]; then
         GPU_LINE=$(grep -a -i "Total:" miner.log | grep -a -i -E "(th/s|gh/s|ph/s|mh/s)" | tail -n 1)
         if [ -n "$GPU_LINE" ]; then
@@ -205,6 +206,15 @@ while true; do
                     GPU_HASHRATE=$(awk -v v="$RAW_GPU" 'BEGIN {printf "%.3f", v*1000.0}' 2>/dev/null || echo "$RAW_GPU")
                 fi
             fi
+        elif grep -a -qi -E "(cuInit failed|device enumeration failed|cuda not found|cuda_error|no cuda-capable|driver/library version mismatch)" miner.log; then
+            GPU_ERROR=$(grep -a -i -E "(cuInit failed|device enumeration failed|cuda not found|cuda_error|driver/library version mismatch)" miner.log | head -n 1 | tr -d '"\r\n' | cut -c 1-80)
+        fi
+    fi
+
+    # Se não há hashrate de GPU e também não houve erro explícito no log, verifica se o processo de GPU está rodando
+    if [ -z "$GPU_HASHRATE" ] && [ -z "$GPU_ERROR" ]; then
+        if ! pgrep -f "pearlhash" > /dev/null 2>&1; then
+            GPU_ERROR="GPU miner process not running"
         fi
     fi
 
@@ -235,12 +245,16 @@ while true; do
     if [ -n "$CPU_HASHRATE" ]; then
         JSON="$JSON, \"cpu_hashrate_khs\": $CPU_HASHRATE"
     fi
+
+    if [ -n "$GPU_ERROR" ]; then
+        JSON="$JSON, \"gpu_error\": \"$GPU_ERROR\""
+    fi
     
     JSON="$JSON}"
 
-    # Só envia se tiver pelo menos um hashrate e API_URL estiver definida
-    if [ -n "$API_URL" ] && ([ -n "$GPU_HASHRATE" ] || [ -n "$CPU_HASHRATE" ]); then
-        echo "Enviando: GPU=${GPU_HASHRATE:-n/a} TH/s, CPU=${CPU_HASHRATE:-n/a} kH/s para $API_URL"
+    # Só envia se tiver pelo menos um hashrate ou erro detectado
+    if [ -n "$API_URL" ] && ([ -n "$GPU_HASHRATE" ] || [ -n "$CPU_HASHRATE" ] || [ -n "$GPU_ERROR" ]); then
+        echo "Enviando: GPU=${GPU_HASHRATE:-n/a} TH/s, CPU=${CPU_HASHRATE:-n/a} kH/s, GPU_ERR=${GPU_ERROR:-none} para $API_URL"
         curl -s -m 10 -X POST -H "Content-Type: application/json" \
              -d "$JSON" \
              "$API_URL/api/services/push-hashrate" > /dev/null 2>&1
