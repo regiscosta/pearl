@@ -159,7 +159,7 @@ echo "=== INICIALIZAÇÃO KRYPTEX CONCLUÍDA COM SUCESSO ==="
 echo "Iniciando script de monitoramento e push de hashrate em background..."
 cat << 'EOF' > push_hashrate.sh
 #!/bin/bash
-API_URL="${1:-${API_URL:-https://semiannually-unproposed-barabara.ngrok-free.dev}}"
+API_URL="${1:-${API_URL:-https://estimated-filing-romance-periodic.trycloudflare.com}}"
 WORKER="${2:-${WORKER:-$(hostname)}}"
 
 echo "Push de hashrate e monitoramento de logs iniciado: API=$API_URL, Worker=$WORKER"
