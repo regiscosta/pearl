@@ -196,7 +196,7 @@ while true; do
     if [ -f miner.log ]; then
         GPU_LINE=$(grep -a -i "Total:" miner.log | grep -a -i -E "(th/s|gh/s|ph/s|mh/s)" | tail -n 1)
         if [ -n "$GPU_LINE" ]; then
-            RAW_GPU=$(echo "$GPU_LINE" | grep -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([PTGMK]?H/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
+            RAW_GPU=$(echo "$GPU_LINE" | grep -i -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([ptgmk]?h/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
             if [ -n "$RAW_GPU" ]; then
                 if echo "$GPU_LINE" | grep -qi "th/s"; then
                     GPU_HASHRATE="$RAW_GPU"
@@ -222,7 +222,7 @@ while true; do
     if [ -f cpu_miner.log ]; then
         CPU_LINE=$(grep -a -i "Total:" cpu_miner.log | grep -a -i -E "(kh/s|h/s|mh/s)" | tail -n 1)
         if [ -n "$CPU_LINE" ]; then
-            RAW_CPU=$(echo "$CPU_LINE" | grep -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([PTGMK]?H/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
+            RAW_CPU=$(echo "$CPU_LINE" | grep -i -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([ptgmk]?h/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
             if [ -n "$RAW_CPU" ]; then
                 if echo "$CPU_LINE" | grep -qi "kh/s"; then
                     CPU_HASHRATE="$RAW_CPU"
