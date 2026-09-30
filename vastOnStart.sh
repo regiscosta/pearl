@@ -155,12 +155,136 @@ fi
 
 echo "=== INICIALIZAÇÃO KRYPTEX CONCLUÍDA COM SUCESSO ==="
 
+# ==============================================================================
+# FASE 2B: Health Checks — Verificação de Saúde Pós-Inicialização
+# Garante que os mineradores GPU/CPU estão rodando corretamente e notifica o backend
+# ==============================================================================
+echo ""
+echo "=== RODANDO HEALTH CHECKS PRÉ-PUSH ==="
+
+GPUPID=""
+CPUPID=""
+GPU_STATUS="stopped"
+CPU_STATUS="stopped"
+BOOT_ERROR=""
+
+# Espera 5 segundos para o minerador GPU iniciar e registrar no log
+sleep 5
+
+# --- Verifica Processo GPU (CRÍTICO) ---
+if pgrep -f "SRBMiner-MULTI.*pearlhash" > /dev/null 2>&1; then
+    GPUPID=$(pgrep -f "SRBMiner-MULTI.*pearlhash" | head -n 1)
+    GPU_STATUS="running"
+    echo "  [OK] Processo GPU rodando (PID: $GPUPID)"
+else
+    # Tenta reiniciar o processo de GPU uma vez
+    echo "  [WARN] Processo GPU não encontrado. Tentando reiniciar..."
+    nohup "$SRBMINER_BIN" \
+        --disable-cpu \
+        --algorithm pearlhash \
+        --pool "$PRL_POOL" \
+        --wallet "$MINER_WALLET" \
+        --log-file miner.log \
+        --log-file-mode 0 \
+        --extended-log \
+        > /dev/null 2>&1 &
+    GPU_PID_RESTART=$!
+    sleep 3
+    if pgrep -f "SRBMiner-MULTI.*pearlhash" > /dev/null 2>&1; then
+        GPUPID=$GPU_PID_RESTART
+        GPU_STATUS="restarted"
+        echo "  [OK] Processo GPU reiniciado com sucesso (PID: $GPUPID)"
+    else
+        GPU_STATUS="failed"
+        BOOT_ERROR="gpu_not_running"
+        echo "  [FAIL] Processo GPU falhou ao iniciar!"
+    fi
+fi
+
+# --- Verifica Processo CPU (INFORMATIVO, mas crítico para renda) ---
+if [ "$CPU_MINING_ENABLED" = "true" ] || [ "$CPU_MINING_ENABLED" = "1" ]; then
+    sleep 2
+    if pgrep -f "SRBMiner-MULTI.*xelishashv3" > /dev/null 2>&1; then
+        CPUPID=$(pgrep -f "SRBMiner-MULTI.*xelishashv3" | head -n 1)
+        CPU_STATUS="running"
+        echo "  [OK] Processo CPU rodando (PID: $CPUPID)"
+    else
+        # Tenta reiniciar o processo de CPU uma vez
+        echo "  [WARN] Processo CPU não encontrado. Tentando reiniciar..."
+        nohup "$SRBMINER_BIN" \
+            --disable-gpu \
+            --algorithm xelishashv3 \
+            --pool "$XEL_POOL" \
+            --wallet "$MINER_WALLET" \
+            --cpu-threads "$CPU_THREADS" \
+            --log-file cpu_miner.log \
+            --log-file-mode 0 \
+            --extended-log \
+            > /dev/null 2>&1 &
+        CPU_PID_RESTART=$!
+        sleep 3
+        if pgrep -f "SRBMiner-MULTI.*xelishashv3" > /dev/null 2>&1; then
+            CPUPID=$CPU_PID_RESTART
+            CPU_STATUS="restarted"
+            echo "  [OK] Processo CPU reiniciado com sucesso (PID: $CPUPID)"
+        else
+            CPU_STATUS="failed"
+            if [ -z "$BOOT_ERROR" ]; then
+                BOOT_ERROR="cpu_not_running"
+            else
+                BOOT_ERROR="${BOOT_ERROR},cpu_not_running"
+            fi
+            echo "  [FAIL] Processo CPU falhou ao iniciar!"
+        fi
+    fi
+fi
+
+# --- Verifica miner.log para erros de GPU (cuInit, device enumeration) ---
+GPU_LOG_ERROR=""
+if [ -f miner.log ] && [ "$GPU_STATUS" = "running" ]; then
+    if grep -qa -E "(cuInit failed|device enumeration failed|cuda not found|cuda_error|no cuda-capable)" miner.log 2>/dev/null; then
+        GPU_LOG_ERROR=$(grep -a -i -E "(cuInit failed|device enumeration failed|cuda not found|cuda_error)" miner.log 2>/dev/null | tail -n 1 | tr -d '\r' | cut -c1-80)
+        echo "  [WARN] Erro detectado no miner.log: $GPU_LOG_ERROR"
+    fi
+fi
+
+# --- Determina status final do boot ---
+if [ "$BOOT_ERROR" = "" ] && [ "$GPU_STATUS" = "running" ]; then
+    if [ -n "$GPU_LOG_ERROR" ]; then
+        BOOT_FINAL_STATUS="partial"
+    else
+        BOOT_FINAL_STATUS="ready"
+    fi
+else
+    BOOT_FINAL_STATUS="failed"
+fi
+
+echo "  Boot final: $BOOT_FINAL_STATUS | GPU=$GPU_STATUS($GPUPID) | CPU=$CPU_STATUS($CPUPID)"
+
+# --- Notifica o backend com status de inicialização ---
+if [ -n "$API_URL" ]; then
+    JSON_READY="{\"instance_id\": \"${INSTANCE_ID:-0}\", \"status\": \"$BOOT_FINAL_STATUS\", \"worker\": \"$WORKER\", \"gpu_pid\": $GPUPID, \"cpu_pid\": $CPUPID"
+    if [ -n "$GPU_LOG_ERROR" ]; then
+        JSON_READY="$JSON_READY, \"gpu_log_error\": \"$GPU_LOG_ERROR\""
+    fi
+    JSON_READY="$JSON_READY}"
+
+    echo "  Enviando status de boot ao backend: $JSON_READY"
+    curl -s -m 10 -X POST \
+         -H "Content-Type: application/json" \
+         -d "$JSON_READY" \
+         "$API_URL/api/services/instance-ready" > /dev/null 2>&1
+fi
+
+echo "=== HEALTH CHECKS CONCLUÍDOS ==="
+echo ""
+
 # --- Push de Hashrate e Manutenção de Espaço em Disco ---
 echo "Iniciando script de monitoramento e push de hashrate em background..."
 cat << 'EOF' > push_hashrate.sh
 #!/bin/bash
-API_URL="${1:-${API_URL:-https://estimated-filing-romance-periodic.trycloudflare.com}}"
-WORKER="${2:-${WORKER:-$(hostname)}}"
+API_URL="$1"
+WORKER="$2"
 
 echo "Push de hashrate e monitoramento de logs iniciado: API=$API_URL, Worker=$WORKER"
 
@@ -196,7 +320,7 @@ while true; do
     if [ -f miner.log ]; then
         GPU_LINE=$(grep -a -i "Total:" miner.log | grep -a -i -E "(th/s|gh/s|ph/s|mh/s)" | tail -n 1)
         if [ -n "$GPU_LINE" ]; then
-            RAW_GPU=$(echo "$GPU_LINE" | grep -i -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([ptgmk]?h/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
+            RAW_GPU=$(echo "$GPU_LINE" | grep -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([PTGMK]?H/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
             if [ -n "$RAW_GPU" ]; then
                 if echo "$GPU_LINE" | grep -qi "th/s"; then
                     GPU_HASHRATE="$RAW_GPU"
@@ -222,7 +346,7 @@ while true; do
     if [ -f cpu_miner.log ]; then
         CPU_LINE=$(grep -a -i "Total:" cpu_miner.log | grep -a -i -E "(kh/s|h/s|mh/s)" | tail -n 1)
         if [ -n "$CPU_LINE" ]; then
-            RAW_CPU=$(echo "$CPU_LINE" | grep -i -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([ptgmk]?h/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
+            RAW_CPU=$(echo "$CPU_LINE" | grep -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([PTGMK]?H/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
             if [ -n "$RAW_CPU" ]; then
                 if echo "$CPU_LINE" | grep -qi "kh/s"; then
                     CPU_HASHRATE="$RAW_CPU"
