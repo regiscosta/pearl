@@ -379,9 +379,14 @@ while true; do
     # Só envia se tiver pelo menos um hashrate ou erro detectado
     if [ -n "$API_URL" ] && ([ -n "$GPU_HASHRATE" ] || [ -n "$CPU_HASHRATE" ] || [ -n "$GPU_ERROR" ]); then
         echo "Enviando: GPU=${GPU_HASHRATE:-n/a} TH/s, CPU=${CPU_HASHRATE:-n/a} kH/s, GPU_ERR=${GPU_ERROR:-none} para $API_URL"
-        curl -s -m 10 -X POST -H "Content-Type: application/json" \
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 10 -X POST -H "Content-Type: application/json" \
              -d "$JSON" \
-             "$API_URL/api/services/push-hashrate" > /dev/null 2>&1
+             "$API_URL/api/services/push-hashrate" 2>/dev/null || echo "000")
+        if [ "$HTTP_CODE" = "200" ]; then
+            echo "  ✓ Push entregue com sucesso (HTTP 200 OK)"
+        else
+            echo "  ✗ ALERTA: Falha ao entregar push (HTTP $HTTP_CODE) para $API_URL"
+        fi
     fi
 done
 EOF
