@@ -13,7 +13,7 @@ PRL_POOL="${PRL_POOL:-prl.kryptex.network:7048}"
 XEL_POOL="${XEL_POOL:-xel.kryptex.network:7019}"
 CPU_THREAD_PERCENT="${CPU_THREAD_PERCENT:-75}"
 CPU_MINING_ENABLED="${CPU_MINING_ENABLED:-true}"
-API_URL="${API_URL:-https://estimated-filing-romance-periodic.trycloudflare.com}"
+API_URL="${API_URL:-https://external-filled-llp-stamps.trycloudflare.com}"
 
 # Determina o nome do worker preferencialmente pelo VAST_CONTAINERLABEL
 if [ -n "$VAST_CONTAINERLABEL" ]; then
