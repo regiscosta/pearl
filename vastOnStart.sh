@@ -7,13 +7,20 @@
 # - CPU: Xelis (XEL via xelishashv3) na pool xel.kryptex.network:7019
 # ==============================================================================
 
+# Carrega variáveis injetadas pela Vast.ai se presentes no ambiente do sistema
+if [ -f /etc/environment ]; then
+    set -a
+    . /etc/environment 2>/dev/null || true
+    set +a
+fi
+
 # Configurações do Usuário Kryptex e Pools
 KRYPTEX_USER="${KRYPTEX_USER:-${WALLET:-krxY4RQDGJ}}"
 PRL_POOL="${PRL_POOL:-prl.kryptex.network:7048}"
 XEL_POOL="${XEL_POOL:-xel.kryptex.network:7019}"
 CPU_THREAD_PERCENT="${CPU_THREAD_PERCENT:-75}"
 CPU_MINING_ENABLED="${CPU_MINING_ENABLED:-true}"
-API_URL="${API_URL:-https://external-filled-llp-stamps.trycloudflare.com}"
+API_URL="${API_URL:-https://emily-books-citations-casa.trycloudflare.com}"
 
 # Determina o nome do worker preferencialmente pelo VAST_CONTAINERLABEL
 if [ -n "$VAST_CONTAINERLABEL" ]; then
