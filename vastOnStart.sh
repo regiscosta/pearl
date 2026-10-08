@@ -325,7 +325,7 @@ while true; do
     
     # Extrai hashrate GPU ou detecta falha no miner.log
     if [ -f miner.log ]; then
-        GPU_LINE=$(grep -a -i "Total:" miner.log | grep -a -i -E "(th/s|gh/s|ph/s|mh/s)" | tail -n 1)
+        GPU_LINE=$(grep -a -i -E "(total|hashrate)" miner.log | grep -a -i -E "(th/s|gh/s|ph/s|mh/s)" | tail -n 1)
         if [ -n "$GPU_LINE" ]; then
             RAW_GPU=$(echo "$GPU_LINE" | grep -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([PTGMK]?H/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
             if [ -n "$RAW_GPU" ]; then
@@ -351,7 +351,7 @@ while true; do
 
     # Extrai hashrate CPU do cpu_miner.log (SRBMiner formato nativo)
     if [ -f cpu_miner.log ]; then
-        CPU_LINE=$(grep -a -i "Total:" cpu_miner.log | grep -a -i -E "(kh/s|h/s|mh/s)" | tail -n 1)
+        CPU_LINE=$(grep -a -i -E "(total|hashrate)" cpu_miner.log | grep -a -i -E "(kh/s|h/s|mh/s)" | tail -n 1)
         if [ -n "$CPU_LINE" ]; then
             RAW_CPU=$(echo "$CPU_LINE" | grep -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([PTGMK]?H/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
             if [ -n "$RAW_CPU" ]; then
