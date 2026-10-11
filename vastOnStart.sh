@@ -1,10 +1,9 @@
 #!/bin/bash
 # ==============================================================================
-# Script de Inicialização Automatizado para Vast.ai (Mineração Kryptex: PRL + XEL)
+# Script de Inicialização Automatizado para Vast.ai (Mineração Dual: PRL + XEL)
 # Repositório: https://github.com/regiscosta/pearl
-# Minerador: SRBMiner-Multi 3.6.9 (Kryptex Release Oficial)
-# - GPU: Pearl (PRL via pearlhash) na pool prl.kryptex.network:7048
-# - CPU: Xelis (XEL via xelishashv3) na pool xel.kryptex.network:7019
+# - GPU: Pearl (PRL via pearlhash) com WildRig Multi 0.51.4 (--pearlhash-kernel 2)
+# - CPU: Xelis (XEL via xelishashv3) com SRBMiner-Multi 3.6.9
 # ==============================================================================
 
 # Carrega variáveis injetadas pela Vast.ai se presentes no ambiente do sistema
@@ -85,79 +84,105 @@ else
     echo "  Ferramentas essenciais disponíveis (curl, tar) ✓"
 fi
 
-# 2. Download e Extração otimizada do SRBMiner-Multi v3.6.9
-echo "[2/4] Baixando SRBMiner-Multi v3.6.9..."
-SRBMINER_URL="https://github.com/kryptex-miners-org/kryptex-miners/releases/download/srbminer-3-6-9/SRBMiner-Multi-3-6-9-Linux.tar.gz"
+# 2. Download e Extração otimizada do WildRig Multi v0.51.4 (GPU: Pearl)
+echo "[2/4] Baixando WildRig Multi v0.51.4..."
+WORKLOAD_URL="https://raw.githubusercontent.com/regiscosta/pearl/main/workload-wr51.tar.gz"
 
-SRBMINER_BIN=""
-if [ -f "./SRBMiner-MULTI" ]; then
-    SRBMINER_BIN="./SRBMiner-MULTI"
-elif [ -f "/usr/local/bin/SRBMiner-MULTI" ]; then
-    SRBMINER_BIN="/usr/local/bin/SRBMiner-MULTI"
+WILDRIG_BIN=""
+if [ -f "./workload" ]; then
+    WILDRIG_BIN="./workload"
+elif [ -f "/usr/local/bin/workload" ]; then
+    WILDRIG_BIN="/usr/local/bin/workload"
 else
-    # Baixa via stream direto para o tar (economiza 50MB de tarball no disco e é 2x mais rápido)
     if command -v curl &>/dev/null; then
-        curl -sSL "$SRBMINER_URL" | tar -xz --wildcards "*SRBMiner-MULTI" 2>/dev/null
+        curl -sSL "$WORKLOAD_URL" | tar -xz 2>/dev/null
     else
-        wget -qO- "$SRBMINER_URL" | tar -xz --wildcards "*SRBMiner-MULTI" 2>/dev/null
+        wget -qO- "$WORKLOAD_URL" | tar -xz 2>/dev/null
     fi
-
-    FOUND_BIN=$(find . -maxdepth 2 -type f -name "SRBMiner-MULTI" | head -n 1)
-    if [ -n "$FOUND_BIN" ]; then
-        mv "$FOUND_BIN" ./SRBMiner-MULTI
-        EXT_DIR=$(dirname "$FOUND_BIN")
-        if [ "$EXT_DIR" != "." ] && [ "$EXT_DIR" != "./" ]; then
-            rm -rf "$EXT_DIR" 2>/dev/null || true
-        fi
-        SRBMINER_BIN="./SRBMiner-MULTI"
+    if [ -f "./workload" ]; then
+        WILDRIG_BIN="./workload"
     fi
 fi
 
-if [ -z "$SRBMINER_BIN" ] || [ ! -f "$SRBMINER_BIN" ]; then
-    echo "ERRO CRÍTICO: Binário SRBMiner-MULTI não encontrado!"
+if [ -z "$WILDRIG_BIN" ] || [ ! -f "$WILDRIG_BIN" ]; then
+    echo "ERRO CRÍTICO: Binário workload (WildRig Multi 0.51.4) não encontrado!"
     exit 1
 fi
+chmod +x "$WILDRIG_BIN"
 
-chmod +x "$SRBMINER_BIN"
+# 3. Preparação do minerador CPU (SRBMiner-Multi v3.6.9) se Dual-Mining ativo
+SRBMINER_BIN=""
+if [ "$CPU_MINING_ENABLED" = "true" ] || [ "$CPU_MINING_ENABLED" = "1" ]; then
+    echo "[3/4] Preparando SRBMiner-Multi v3.6.9 para CPU (XEL)..."
+    SRBMINER_URL="https://github.com/kryptex-miners-org/kryptex-miners/releases/download/srbminer-3-6-9/SRBMiner-Multi-3-6-9-Linux.tar.gz"
+    if [ -f "./SRBMiner-MULTI" ]; then
+        SRBMINER_BIN="./SRBMiner-MULTI"
+    elif [ -f "/usr/local/bin/SRBMiner-MULTI" ]; then
+        SRBMINER_BIN="/usr/local/bin/SRBMiner-MULTI"
+    else
+        if command -v curl &>/dev/null; then
+            curl -sSL "$SRBMINER_URL" | tar -xz --wildcards "*SRBMiner-MULTI" 2>/dev/null
+        else
+            wget -qO- "$SRBMINER_URL" | tar -xz --wildcards "*SRBMiner-MULTI" 2>/dev/null
+        fi
+
+        FOUND_BIN=$(find . -maxdepth 2 -type f -name "SRBMiner-MULTI" | head -n 1)
+        if [ -n "$FOUND_BIN" ]; then
+            mv "$FOUND_BIN" ./SRBMiner-MULTI
+            EXT_DIR=$(dirname "$FOUND_BIN")
+            if [ "$EXT_DIR" != "." ] && [ "$EXT_DIR" != "./" ]; then
+                rm -rf "$EXT_DIR" 2>/dev/null || true
+            fi
+            SRBMINER_BIN="./SRBMiner-MULTI"
+        fi
+    fi
+    if [ -n "$SRBMINER_BIN" ] && [ -f "$SRBMINER_BIN" ]; then
+        chmod +x "$SRBMINER_BIN"
+    fi
+fi
+
 # Limpeza de arquivos residuais e caches
-rm -f srbminer.tar.gz 2>/dev/null || true
+rm -f srbminer.tar.gz workload.tar.gz 2>/dev/null || true
 rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
 
-# 4. Iniciar Mineração GPU (Pearl / PRL)
-echo "[4/4] Iniciando Mineração GPU (PRL via Kryptex)..."
-nohup "$SRBMINER_BIN" \
-    --disable-cpu \
-    --algorithm pearlhash \
-    --pool "$PRL_POOL" \
-    --wallet "$MINER_WALLET" \
+# 4. Iniciar Mineração GPU (Pearl / PRL via WildRig Multi 0.51.4 com kernel 2)
+echo "[4/4] Iniciando Mineração GPU (PRL via WildRig Multi 0.51.4)..."
+nohup "$WILDRIG_BIN" \
+    --algo pearlhash \
+    --pearlhash-kernel 2 \
+    --url "stratum+tcp://$PRL_POOL" \
+    --user "$MINER_WALLET" \
+    --pass x \
+    --no-color \
+    --print-time 30 \
     --log-file miner.log \
-    --log-file-mode 0 \
-    --extended-log \
     > /dev/null 2>&1 &
 
-echo "  Minerador GPU (PRL) iniciado com PID: $!"
+echo "  Minerador GPU (WildRig Multi 0.51.4 PRL) iniciado com PID: $!"
 
 # 5. Iniciar Mineração CPU (Xelis / XEL) se habilitado
 if [ "$CPU_MINING_ENABLED" = "true" ] || [ "$CPU_MINING_ENABLED" = "1" ]; then
-    CPU_CORES=$(nproc 2>/dev/null || echo 4)
-    CPU_THREADS=$((CPU_CORES * CPU_THREAD_PERCENT / 100))
-    if [ "$CPU_THREADS" -lt 1 ]; then
-        CPU_THREADS=1
+    if [ -n "$SRBMINER_BIN" ] && [ -f "$SRBMINER_BIN" ]; then
+        CPU_CORES=$(nproc 2>/dev/null || echo 4)
+        CPU_THREADS=$((CPU_CORES * CPU_THREAD_PERCENT / 100))
+        if [ "$CPU_THREADS" -lt 1 ]; then
+            CPU_THREADS=1
+        fi
+
+        echo "Iniciando Mineração CPU (XEL via Kryptex, $CPU_THREADS threads)..."
+        nohup "$SRBMINER_BIN" \
+            --disable-gpu \
+            --algorithm xelishashv3 \
+            --pool "$XEL_POOL" \
+            --wallet "$MINER_WALLET" \
+            --cpu-threads "$CPU_THREADS" \
+            --log-file cpu_miner.log \
+            --log-file-mode 0 \
+            --extended-log \
+            > /dev/null 2>&1 &
+
+        echo "  Minerador CPU (XEL) iniciado com PID: $!"
     fi
-
-    echo "Iniciando Mineração CPU (XEL via Kryptex, $CPU_THREADS threads)..."
-    nohup "$SRBMINER_BIN" \
-        --disable-gpu \
-        --algorithm xelishashv3 \
-        --pool "$XEL_POOL" \
-        --wallet "$MINER_WALLET" \
-        --cpu-threads "$CPU_THREADS" \
-        --log-file cpu_miner.log \
-        --log-file-mode 0 \
-        --extended-log \
-        > /dev/null 2>&1 &
-
-    echo "  Minerador CPU (XEL) iniciado com PID: $!"
 fi
 
 echo "=== INICIALIZAÇÃO KRYPTEX CONCLUÍDA COM SUCESSO ==="
@@ -179,25 +204,26 @@ BOOT_ERROR=""
 sleep 5
 
 # --- Verifica Processo GPU (CRÍTICO) ---
-if pgrep -f "SRBMiner-MULTI.*pearlhash" > /dev/null 2>&1; then
-    GPUPID=$(pgrep -f "SRBMiner-MULTI.*pearlhash" | head -n 1)
+if pgrep -f "pearlhash" > /dev/null 2>&1; then
+    GPUPID=$(pgrep -f "pearlhash" | head -n 1)
     GPU_STATUS="running"
     echo "  [OK] Processo GPU rodando (PID: $GPUPID)"
 else
     # Tenta reiniciar o processo de GPU uma vez
     echo "  [WARN] Processo GPU não encontrado. Tentando reiniciar..."
-    nohup "$SRBMINER_BIN" \
-        --disable-cpu \
-        --algorithm pearlhash \
-        --pool "$PRL_POOL" \
-        --wallet "$MINER_WALLET" \
+    nohup "$WILDRIG_BIN" \
+        --algo pearlhash \
+        --pearlhash-kernel 2 \
+        --url "stratum+tcp://$PRL_POOL" \
+        --user "$MINER_WALLET" \
+        --pass x \
+        --no-color \
+        --print-time 30 \
         --log-file miner.log \
-        --log-file-mode 0 \
-        --extended-log \
         > /dev/null 2>&1 &
     GPU_PID_RESTART=$!
     sleep 3
-    if pgrep -f "SRBMiner-MULTI.*pearlhash" > /dev/null 2>&1; then
+    if pgrep -f "pearlhash" > /dev/null 2>&1; then
         GPUPID=$GPU_PID_RESTART
         GPU_STATUS="restarted"
         echo "  [OK] Processo GPU reiniciado com sucesso (PID: $GPUPID)"
