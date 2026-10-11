@@ -328,7 +328,7 @@ while true; do
     if [ -f miner.log ]; then
         GPU_LINE=$(grep -a -i -E "(total|hashrate)" miner.log | grep -a -i -E "(th/s|gh/s|ph/s|mh/s)" | tail -n 1)
         if [ -n "$GPU_LINE" ]; then
-            RAW_GPU=$(echo "$GPU_LINE" | grep -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([PTGMK]?H/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
+            RAW_GPU=$(echo "$GPU_LINE" | grep -i -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*[a-z]?h/s' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
             if [ -n "$RAW_GPU" ]; then
                 if echo "$GPU_LINE" | grep -qi "th/s"; then
                     GPU_HASHRATE="$RAW_GPU"
@@ -352,16 +352,19 @@ while true; do
 
     # Extrai hashrate CPU do cpu_miner.log (SRBMiner formato nativo)
     if [ -f cpu_miner.log ]; then
-        CPU_LINE=$(grep -a -i -E "(total|hashrate)" cpu_miner.log | grep -a -i -E "(kh/s|h/s|mh/s)" | tail -n 1)
+        CPU_LINE=$(grep -a -i -E "total:" cpu_miner.log | grep -a -i -E "(kh/s|h/s|mh/s)" | tail -n 1)
+        if [ -z "$CPU_LINE" ]; then
+            CPU_LINE=$(grep -a -i -E "(total|hashrate)" cpu_miner.log | grep -a -i -E "(kh/s|h/s|mh/s)" | tail -n 1)
+        fi
         if [ -n "$CPU_LINE" ]; then
-            RAW_CPU=$(echo "$CPU_LINE" | grep -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*([PTGMK]?H/s)' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
+            RAW_CPU=$(echo "$CPU_LINE" | grep -i -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*[a-z]?h/s' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
             if [ -n "$RAW_CPU" ]; then
                 if echo "$CPU_LINE" | grep -qi "kh/s"; then
                     CPU_HASHRATE="$RAW_CPU"
-                elif echo "$CPU_LINE" | grep -qi "h/s" && ! echo "$CPU_LINE" | grep -qi "kh/s" && ! echo "$CPU_LINE" | grep -qi "mh/s"; then
-                    CPU_HASHRATE=$(awk -v v="$RAW_CPU" 'BEGIN {printf "%.3f", v/1000.0}' 2>/dev/null || echo "$RAW_CPU")
                 elif echo "$CPU_LINE" | grep -qi "mh/s"; then
                     CPU_HASHRATE=$(awk -v v="$RAW_CPU" 'BEGIN {printf "%.3f", v*1000.0}' 2>/dev/null || echo "$RAW_CPU")
+                elif echo "$CPU_LINE" | grep -qi "h/s"; then
+                    CPU_HASHRATE=$(awk -v v="$RAW_CPU" 'BEGIN {printf "%.3f", v/1000.0}' 2>/dev/null || echo "$RAW_CPU")
                 fi
             fi
         fi
