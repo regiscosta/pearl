@@ -3,7 +3,7 @@
 # Script de Inicialização Automatizado para Vast.ai (Mineração Dual: PRL + XEL)
 # Repositório: https://github.com/regiscosta/pearl
 # - GPU: Pearl (PRL via pearlhash) com WildRig Multi 0.51.4 (--pearlhash-kernel 2)
-# - CPU: Xelis (XEL via xelishashv3) com SRBMiner-Multi 3.6.9
+# - CPU: Xelis (XEL via xelishashv3) com SRBMiner-Multi 3.7.5
 # ==============================================================================
 
 # Carrega variáveis injetadas pela Vast.ai se presentes no ambiente do sistema
@@ -110,11 +110,11 @@ if [ -z "$WILDRIG_BIN" ] || [ ! -f "$WILDRIG_BIN" ]; then
 fi
 chmod +x "$WILDRIG_BIN"
 
-# 3. Preparação do minerador CPU (SRBMiner-Multi v3.6.9) se Dual-Mining ativo
+# 3. Preparação do minerador CPU (SRBMiner-Multi v3.7.5) se Dual-Mining ativo
 SRBMINER_BIN=""
 if [ "$CPU_MINING_ENABLED" = "true" ] || [ "$CPU_MINING_ENABLED" = "1" ]; then
-    echo "[3/4] Preparando SRBMiner-Multi v3.6.9 para CPU (XEL)..."
-    SRBMINER_URL="https://github.com/kryptex-miners-org/kryptex-miners/releases/download/srbminer-3-6-9/SRBMiner-Multi-3-6-9-Linux.tar.gz"
+    echo "[3/4] Preparando SRBMiner-Multi v3.7.5 para CPU (XEL)..."
+    SRBMINER_URL="https://github.com/kryptex-miners-org/kryptex-miners/releases/download/srbminer-3-7-5/SRBMiner-Multi-3-7-5-Linux.tar.gz"
     if [ -f "./SRBMiner-MULTI" ]; then
         SRBMINER_BIN="./SRBMiner-MULTI"
     elif [ -f "/usr/local/bin/SRBMiner-MULTI" ]; then
