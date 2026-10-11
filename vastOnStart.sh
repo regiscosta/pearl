@@ -328,14 +328,17 @@ while true; do
     if [ -f miner.log ]; then
         GPU_LINE=$(grep -a -i -E "(total|hashrate)" miner.log | grep -a -i -E "(th/s|gh/s|ph/s|mh/s)" | tail -n 1)
         if [ -n "$GPU_LINE" ]; then
-            RAW_GPU=$(echo "$GPU_LINE" | grep -i -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*[a-z]?h/s' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
-            if [ -n "$RAW_GPU" ]; then
-                if echo "$GPU_LINE" | grep -qi "th/s"; then
-                    GPU_HASHRATE="$RAW_GPU"
-                elif echo "$GPU_LINE" | grep -qi "gh/s"; then
-                    GPU_HASHRATE=$(awk -v v="$RAW_GPU" 'BEGIN {printf "%.3f", v/1000.0}' 2>/dev/null || echo "$RAW_GPU")
-                elif echo "$GPU_LINE" | grep -qi "ph/s"; then
-                    GPU_HASHRATE=$(awk -v v="$RAW_GPU" 'BEGIN {printf "%.3f", v*1000.0}' 2>/dev/null || echo "$RAW_GPU")
+            RAW_MATCH=$(echo "$GPU_LINE" | grep -i -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*[ptgmk]?h/s' | head -n 1)
+            if [ -n "$RAW_MATCH" ]; then
+                RAW_VAL=$(echo "$RAW_MATCH" | grep -o -E '[0-9]+(\.[0-9]+)?')
+                if echo "$RAW_MATCH" | grep -qi "th/s"; then
+                    GPU_HASHRATE="$RAW_VAL"
+                elif echo "$RAW_MATCH" | grep -qi "gh/s"; then
+                    GPU_HASHRATE=$(awk -v v="$RAW_VAL" 'BEGIN {printf "%.3f", v/1000.0}' 2>/dev/null || echo "$RAW_VAL")
+                elif echo "$RAW_MATCH" | grep -qi "ph/s"; then
+                    GPU_HASHRATE=$(awk -v v="$RAW_VAL" 'BEGIN {printf "%.3f", v*1000.0}' 2>/dev/null || echo "$RAW_VAL")
+                elif echo "$RAW_MATCH" | grep -qi "mh/s"; then
+                    GPU_HASHRATE=$(awk -v v="$RAW_VAL" 'BEGIN {printf "%.6f", v/1000000.0}' 2>/dev/null || echo "$RAW_VAL")
                 fi
             fi
         elif grep -a -qi -E "(cuInit failed|device enumeration failed|cuda not found|cuda_error|no cuda-capable|driver/library version mismatch)" miner.log; then
@@ -357,13 +360,14 @@ while true; do
             CPU_LINE=$(grep -a -i -E "(total|hashrate)" cpu_miner.log | grep -a -i -E "(kh/s|h/s|mh/s)" | tail -n 1)
         fi
         if [ -n "$CPU_LINE" ]; then
-            RAW_CPU=$(echo "$CPU_LINE" | grep -i -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*[a-z]?h/s' | grep -o -E '[0-9]+(\.[0-9]+)?' | head -n 1)
-            if [ -n "$RAW_CPU" ]; then
-                if echo "$CPU_LINE" | grep -qi "kh/s"; then
+            RAW_MATCH_CPU=$(echo "$CPU_LINE" | grep -i -o -E '[0-9]+(\.[0-9]+)?[[:space:]]*[ptgmk]?h/s' | head -n 1)
+            if [ -n "$RAW_MATCH_CPU" ]; then
+                RAW_CPU=$(echo "$RAW_MATCH_CPU" | grep -o -E '[0-9]+(\.[0-9]+)?')
+                if echo "$RAW_MATCH_CPU" | grep -qi "kh/s"; then
                     CPU_HASHRATE="$RAW_CPU"
-                elif echo "$CPU_LINE" | grep -qi "mh/s"; then
+                elif echo "$RAW_MATCH_CPU" | grep -qi "mh/s"; then
                     CPU_HASHRATE=$(awk -v v="$RAW_CPU" 'BEGIN {printf "%.3f", v*1000.0}' 2>/dev/null || echo "$RAW_CPU")
-                elif echo "$CPU_LINE" | grep -qi "h/s"; then
+                elif echo "$RAW_MATCH_CPU" | grep -qi "h/s"; then
                     CPU_HASHRATE=$(awk -v v="$RAW_CPU" 'BEGIN {printf "%.3f", v/1000.0}' 2>/dev/null || echo "$RAW_CPU")
                 fi
             fi
