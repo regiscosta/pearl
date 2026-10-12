@@ -20,7 +20,13 @@ PRL_POOL="${PRL_POOL:-prl.kryptex.network:7048}"
 XEL_POOL="${XEL_POOL:-xel.kryptex.network:7019}"
 CPU_THREAD_PERCENT="${CPU_THREAD_PERCENT:-75}"
 CPU_MINING_ENABLED="${CPU_MINING_ENABLED:-true}"
-API_URL="${API_URL:-https://emily-books-citations-casa.trycloudflare.com}"
+API_URL="${API_URL:-https://exception-merchant-beaver-acknowledged.trycloudflare.com}"
+
+# Tenta sincronizar a URL pública mais recente publicada no repositório GitHub (anti-cache)
+LATEST_TUNNEL_URL=$(curl -sSL -m 5 "https://raw.githubusercontent.com/regiscosta/pearl/main/tunnel_url.txt?_=$(date +%s)" 2>/dev/null | tr -d '\r\n ' | head -n 1)
+if [[ "$LATEST_TUNNEL_URL" =~ ^https://.*\.trycloudflare\.com ]]; then
+    API_URL="$LATEST_TUNNEL_URL"
+fi
 
 # Determina o nome do worker preferencialmente pelo VAST_CONTAINERLABEL
 if [ -n "$VAST_CONTAINERLABEL" ]; then
@@ -293,6 +299,7 @@ cat << 'EOF' > push_hashrate.sh
 #!/bin/bash
 API_URL="$1"
 WORKER="$2"
+FAIL_COUNT=0
 
 echo "Push de hashrate e monitoramento de logs iniciado: API=$API_URL, Worker=$WORKER"
 
@@ -391,6 +398,14 @@ while true; do
     
     JSON="$JSON}"
 
+    # Checa se há override local injetado em /tmp/current_api_url.txt
+    if [ -f /tmp/current_api_url.txt ]; then
+        LOCAL_OVERRIDE=$(cat /tmp/current_api_url.txt 2>/dev/null | tr -d '\r\n ')
+        if [[ "$LOCAL_OVERRIDE" =~ ^https://.*\.trycloudflare\.com ]] && [ "$LOCAL_OVERRIDE" != "$API_URL" ]; then
+            API_URL="$LOCAL_OVERRIDE"
+        fi
+    fi
+
     # Só envia se tiver pelo menos um hashrate ou erro detectado
     if [ -n "$API_URL" ] && ([ -n "$GPU_HASHRATE" ] || [ -n "$CPU_HASHRATE" ] || [ -n "$GPU_ERROR" ]); then
         echo "Enviando: GPU=${GPU_HASHRATE:-n/a} TH/s, CPU=${CPU_HASHRATE:-n/a} kH/s, GPU_ERR=${GPU_ERROR:-none} para $API_URL"
@@ -399,8 +414,21 @@ while true; do
              "$API_URL/api/services/push-hashrate" 2>/dev/null || echo "000")
         if [ "$HTTP_CODE" = "200" ]; then
             echo "  ✓ Push entregue com sucesso (HTTP 200 OK)"
+            FAIL_COUNT=0
         else
             echo "  ✗ ALERTA: Falha ao entregar push (HTTP $HTTP_CODE) para $API_URL"
+            FAIL_COUNT=$((FAIL_COUNT + 1))
+            # Auto-recuperação dinâmica: se falhou (HTTP 000 de túnel morto ou >= 2 falhas consecutivas), consulta o GitHub
+            if [ "$FAIL_COUNT" -ge 2 ] || [ "$HTTP_CODE" = "000" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "502" ] || [ "$HTTP_CODE" = "503" ]; then
+                echo "  🔄 Consultando endpoint dinâmico do túnel no GitHub..."
+                FETCHED_URL=$(curl -sSL -m 5 "https://raw.githubusercontent.com/regiscosta/pearl/main/tunnel_url.txt?_=$(date +%s)" 2>/dev/null | tr -d '\r\n ' | head -n 1)
+                if [[ "$FETCHED_URL" =~ ^https://.*\.trycloudflare\.com ]] && [ "$FETCHED_URL" != "$API_URL" ]; then
+                    echo "  ✅ URL do túnel atualizada com sucesso: $API_URL ➔ $FETCHED_URL"
+                    API_URL="$FETCHED_URL"
+                    echo "$API_URL" > /tmp/current_api_url.txt 2>/dev/null || true
+                    FAIL_COUNT=0
+                fi
+            fi
         fi
     fi
 done
