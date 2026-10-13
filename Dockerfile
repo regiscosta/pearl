@@ -12,7 +12,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=all
 
-# 1. Instala utilitários essenciais e o OpenSSH Server (exigido pelo Vast.ai)
+# 1. Instala utilitários essenciais e todas as ferramentas exigidas pelo ambiente Vast.ai SSH
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     curl \
     wget \
@@ -22,6 +22,12 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     tmux \
     procps \
     openssh-server \
+    git \
+    less \
+    locales \
+    sudo \
+    software-properties-common \
+    rsync \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # 2. Prepara diretórios do OpenSSH com permissões corretas
