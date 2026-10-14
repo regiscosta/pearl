@@ -28,9 +28,27 @@ if [[ "$LATEST_TUNNEL_URL" =~ ^https://.*\.trycloudflare\.com ]]; then
     API_URL="$LATEST_TUNNEL_URL"
 fi
 
-# Determina o nome do worker preferencialmente pelo VAST_CONTAINERLABEL
+# Determina o INSTANCE_ID da máquina da Vast.ai
+INSTANCE_ID="${INSTANCE_ID:-${VAST_CONTAINERLABEL:-}}"
+if [ -z "$INSTANCE_ID" ] && [ -f ~/.vast_containerlabel ]; then
+    INSTANCE_ID="$(cat ~/.vast_containerlabel 2>/dev/null || echo "")"
+elif [ -z "$INSTANCE_ID" ] && [ -f /root/.vast_containerlabel ]; then
+    INSTANCE_ID="$(cat /root/.vast_containerlabel 2>/dev/null || echo "")"
+fi
+# Se ainda vazio, extrai dígitos do hostname (ex: c.52464923 ou vast-52464923)
+if [ -z "$INSTANCE_ID" ]; then
+    RAW_H=$(cat /etc/hostname 2>/dev/null || hostname 2>/dev/null || echo "")
+    NUM_H=$(echo "$RAW_H" | tr -cd '0-9')
+    if [ ${#NUM_H} -ge 5 ]; then
+        INSTANCE_ID="$NUM_H"
+    fi
+fi
+
+# Determina o nome do worker preferencialmente pelo VAST_CONTAINERLABEL ou INSTANCE_ID
 if [ -n "$VAST_CONTAINERLABEL" ]; then
     WORKER="$VAST_CONTAINERLABEL"
+elif [ -n "$INSTANCE_ID" ]; then
+    WORKER="$INSTANCE_ID"
 elif [ -f ~/.vast_containerlabel ]; then
     WORKER="$(cat ~/.vast_containerlabel)"
 elif [ -f /root/.vast_containerlabel ]; then
@@ -91,16 +109,19 @@ else
     echo "  Ferramentas essenciais disponíveis (curl, tar) ✓"
 fi
 
-# 2. Download e Extração otimizada do SRBMiner-Multi v3.7.5 (Kryptex Oficial)
-echo "[2/4] Baixando SRBMiner-Multi v3.7.5..."
+# 2. Localização e Extração otimizada do SRBMiner-Multi v3.7.5 (Kryptex Oficial)
+echo "[2/4] Verificando SRBMiner-Multi v3.7.5..."
 SRBMINER_URL="https://github.com/kryptex-miners-org/kryptex-miners/releases/download/srbminer-3-7-5/SRBMiner-Multi-3-7-5-Linux.tar.gz"
 
 SRBMINER_BIN=""
-if [ -f "./SRBMiner-MULTI" ]; then
-    SRBMINER_BIN="./SRBMiner-MULTI"
-elif [ -f "/usr/local/bin/SRBMiner-MULTI" ]; then
+if [ -f "/usr/local/bin/SRBMiner-MULTI" ]; then
     SRBMINER_BIN="/usr/local/bin/SRBMiner-MULTI"
+    echo "  Binário pré-instalado na imagem Docker encontrado em /usr/local/bin/SRBMiner-MULTI ✓"
+elif [ -f "./SRBMiner-MULTI" ]; then
+    SRBMINER_BIN="./SRBMiner-MULTI"
+    echo "  Binário local encontrado em ./SRBMiner-MULTI ✓"
 else
+    echo "  Binário ausente, baixando via stream..."
     # Baixa via stream direto para o tar (economiza 50MB de tarball no disco e é 2x mais rápido)
     if command -v curl &>/dev/null; then
         curl -sSL "$SRBMINER_URL" | tar -xz --wildcards "*SRBMiner-MULTI" 2>/dev/null
@@ -277,7 +298,7 @@ echo "  Boot final: $BOOT_FINAL_STATUS | GPU=$GPU_STATUS($GPUPID) | CPU=$CPU_STA
 
 # --- Notifica o backend com status de inicialização ---
 if [ -n "$API_URL" ]; then
-    JSON_READY="{\"instance_id\": \"${INSTANCE_ID:-0}\", \"status\": \"$BOOT_FINAL_STATUS\", \"worker\": \"$WORKER\", \"gpu_pid\": $GPUPID, \"cpu_pid\": $CPUPID"
+    JSON_READY="{\"instance_id\": \"${INSTANCE_ID:-0}\", \"status\": \"$BOOT_FINAL_STATUS\", \"worker\": \"$WORKER\", \"gpu_pid\": ${GPUPID:-0}, \"cpu_pid\": ${CPUPID:-0}"
     if [ -n "$GPU_LOG_ERROR" ]; then
         JSON_READY="$JSON_READY, \"gpu_log_error\": \"$GPU_LOG_ERROR\""
     fi
